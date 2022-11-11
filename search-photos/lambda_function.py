@@ -1,16 +1,12 @@
-import os
 import json
-import time
-import requests
 
 import boto3
-from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
-
+import inflect
+from opensearchpy import AWSV4SignerAuth, OpenSearch, RequestsHttpConnection
 
 region = "us-east-1"
-
-# Set up lex client
 lex_client = boto3.client("lexv2-runtime", region)
+inflect_engine = inflect.engine()
 
 
 def get_labels_from_lex(query):
@@ -28,15 +24,17 @@ def get_labels_from_lex(query):
     for slot in slots:
         if slots[slot] is not None:
             if "interpretedValue" in slots[slot]["value"]:
-                labels.append(slots[slot]["value"]["interpretedValue"])
+                value = slots[slot]["value"]["interpretedValue"]
             else:
-                labels.append(slots[slot]["value"]["originalValue"])
+                value = slots[slot]["value"]["originalValue"]
+            word = inflect_engine.plural(value)
+            labels.append(value)
+            labels.append(word)
 
     return labels
 
 
 def get_images_from_opensearch(labels):
-
     # Send to opensearch
     credentials = boto3.Session().get_credentials()
     aws_auth = AWSV4SignerAuth(credentials, region)
@@ -57,7 +55,7 @@ def get_images_from_opensearch(labels):
         query = {"query": {"match": {"labels": label}}}
 
         response = opensearch_client.search(body=query, index=index)
-        hits = response["hits"]
+        hits = response["hits"]["hits"]
 
         for hit in hits:
             img = hit["_source"]["objectKey"]
@@ -68,15 +66,12 @@ def get_images_from_opensearch(labels):
 
 # Lambda invocation hook
 def lambda_handler(event, context):
-    print(event)
-    print(context)
     query = event["queryStringParameters"]["q"]
 
     labels = get_labels_from_lex(query)
 
     images = get_images_from_opensearch(labels)
     image_json = {"imagePaths": images}
-    print(image_json)
 
     return {
         "statusCode": 200,
