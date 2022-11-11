@@ -1,5 +1,14 @@
 version: 0.2
 phases:
+  install:
+    runtime-versions:
+      python: 3.9
   build:
     commands:
       - echo Build started on `date`
+    post_build:
+      - echo "Updating lambda function index-photos"
+      - aws lambda update-function-code --function-name index-photos --zip-file fileb://index-photos.zip
+      - echo "Updating lambda function search-photos"
+      - aws lambda update-function-code --function-name search-photos --zip-file fileb://search-photos.zip
+      - echo "Done!"
